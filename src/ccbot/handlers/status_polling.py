@@ -103,7 +103,7 @@ async def _notify_cc_exit(
     ]])
     await safe_send(
         bot, chat_id,
-        f"⚠ Claude Code exited.\n\nRestart command: `{cmd}`\n\n"
+        f"⚠ Claude Code exited.\n\nRestart command:\n```shell\n{cmd}\n```\n"
         "Tap Restart or send a custom command.",
         message_thread_id=thread_id,
         reply_markup=keyboard,

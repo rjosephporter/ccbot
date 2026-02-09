@@ -10,7 +10,11 @@ Key function: convert_markdown(text) → MarkdownV2 string.
 
 import re
 
+import mistletoe
 import telegramify_markdown
+from mistletoe.block_token import BlockCode, remove_token
+from telegramify_markdown import _update_block, escape_latex
+from telegramify_markdown.render import TelegramMarkdownRenderer
 
 from .transcript_parser import TranscriptParser
 
@@ -66,6 +70,25 @@ def _render_expandable_quote(m: re.Match[str]) -> str:
     return "\n".join(built) + "||"
 
 
+def _markdownify(text: str) -> str:
+    """Custom markdownify with our rendering rules.
+
+    Wraps TelegramMarkdownRenderer directly (instead of calling
+    telegramify_markdown.markdownify) so we can tweak token rules
+    inside the context manager — reset_tokens() in __exit__ would
+    otherwise undo any module-level changes.
+
+    Custom rules:
+      - Disable indented code blocks (only fenced ``` blocks are code).
+    """
+    with TelegramMarkdownRenderer(normalize_whitespace=False) as renderer:
+        remove_token(BlockCode)
+        content = escape_latex(text)
+        document = mistletoe.Document(content)
+        _update_block(document)
+        return renderer.render(document)
+
+
 def convert_markdown(text: str) -> str:
     """Convert standard Markdown to Telegram MarkdownV2 format.
 
@@ -85,7 +108,7 @@ def convert_markdown(text: str) -> str:
         segments.append((False, text[last_end:]))
 
     if not segments:
-        return telegramify_markdown.markdownify(text, normalize_whitespace=False)
+        return _markdownify(text)
 
     parts: list[str] = []
     for is_quote, segment in segments:
@@ -93,6 +116,6 @@ def convert_markdown(text: str) -> str:
             parts.append(_EXPQUOTE_RE.sub(_render_expandable_quote, segment))
         else:
             parts.append(
-                telegramify_markdown.markdownify(segment, normalize_whitespace=False)
+                _markdownify(segment)
             )
     return "".join(parts)

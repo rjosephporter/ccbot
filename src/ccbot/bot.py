@@ -469,9 +469,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # Store group chat_id for forum topic message routing
     if query.message and query.message.chat.type in ("group", "supergroup"):
-        thread_id = getattr(query.message, "message_thread_id", None)
-        if thread_id is not None:
-            session_manager.set_group_chat_id(user.id, thread_id, query.message.chat.id)
+        cb_thread_id = _get_thread_id(update)
+        if cb_thread_id is not None:
+            session_manager.set_group_chat_id(user.id, cb_thread_id, query.message.chat.id)
 
     data = query.data
 
@@ -515,6 +515,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # Directory browser handlers
     elif data.startswith(CB_DIR_SELECT):
+        # Validate: callback must come from the same topic that started browsing
+        pending_tid = context.user_data.get("_pending_thread_id") if context.user_data else None
+        if pending_tid is not None and _get_thread_id(update) != pending_tid:
+            await query.answer("Stale browser (topic mismatch)", show_alert=True)
+            return
         # callback_data contains index, not dir name (to avoid 64-byte limit)
         try:
             idx = int(data[len(CB_DIR_SELECT):])
@@ -549,6 +554,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer()
 
     elif data == CB_DIR_UP:
+        pending_tid = context.user_data.get("_pending_thread_id") if context.user_data else None
+        if pending_tid is not None and _get_thread_id(update) != pending_tid:
+            await query.answer("Stale browser (topic mismatch)", show_alert=True)
+            return
         default_path = str(Path.cwd())
         current_path = context.user_data.get(BROWSE_PATH_KEY, default_path) if context.user_data else default_path
         current = Path(current_path).resolve()
@@ -567,6 +576,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer()
 
     elif data.startswith(CB_DIR_PAGE):
+        pending_tid = context.user_data.get("_pending_thread_id") if context.user_data else None
+        if pending_tid is not None and _get_thread_id(update) != pending_tid:
+            await query.answer("Stale browser (topic mismatch)", show_alert=True)
+            return
         try:
             pg = int(data[len(CB_DIR_PAGE):])
         except ValueError:
@@ -588,6 +601,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         selected_path = context.user_data.get(BROWSE_PATH_KEY, default_path) if context.user_data else default_path
         # Check if this was initiated from a thread bind flow
         pending_thread_id: int | None = context.user_data.get("_pending_thread_id") if context.user_data else None
+
+        # Validate: confirm button must come from the same topic that started browsing
+        confirm_thread_id = _get_thread_id(update)
+        if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
+            clear_browse_state(context.user_data)
+            if context.user_data is not None:
+                context.user_data.pop("_pending_thread_id", None)
+                context.user_data.pop("_pending_thread_text", None)
+            await query.answer("Stale browser (topic mismatch)", show_alert=True)
+            return
 
         clear_browse_state(context.user_data)
 
@@ -655,6 +678,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer("Created" if success else "Failed")
 
     elif data == CB_DIR_CANCEL:
+        pending_tid = context.user_data.get("_pending_thread_id") if context.user_data else None
+        if pending_tid is not None and _get_thread_id(update) != pending_tid:
+            await query.answer("Stale browser (topic mismatch)", show_alert=True)
+            return
         clear_browse_state(context.user_data)
         if context.user_data is not None:
             context.user_data.pop("_pending_thread_id", None)

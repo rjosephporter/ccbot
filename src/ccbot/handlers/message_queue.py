@@ -198,7 +198,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                 elif task.task_type == "status_update":
                     await _process_status_update_task(bot, user_id, task)
                 elif task.task_type == "status_clear":
-                    await _do_clear_status_message(bot, user_id)
+                    await _do_clear_status_message(bot, user_id, task.thread_id or 0)
             except RetryAfter as e:
                 retry_secs = e.retry_after if isinstance(e.retry_after, int) else int(e.retry_after.total_seconds())
                 logger.warning(
